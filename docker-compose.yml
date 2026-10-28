@@ -1,0 +1,58 @@
+﻿services:
+  db:
+    image: postgres:16
+    container_name: kanban_db
+    environment:
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: kanban
+      POSTGRES_DB: kanban
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kanban_redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    container_name: kanban_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - TESTCONTAINERS_RYUK_DISABLED=true
+      - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
+
+  frontend:
+    build: ./frontend
+    container_name: kanban_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://host.docker.internal:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev
+
+volumes:
+  pgdata:
